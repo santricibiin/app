@@ -117,8 +117,9 @@ const startWebhook = () => {
         res.json({ status: 'ok' });
     });
 
-    app.listen(3000, () => {
-        font.log('WEBHOOK PORT 3000');
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+        font.log(`WEBHOOK PORT ${PORT}`);
     });
 };
 
