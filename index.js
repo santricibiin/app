@@ -283,9 +283,11 @@ bot.start(async (ctx) => {
 
         const { startWebhook, setBotInstance } = require('./webhook');
         const { startBackupService } = require('./utils/backupService');
+        const { startWeb } = require('./web/server');
 
         setBotInstance(bot);
         startWebhook();
+        startWeb();
         await startBackupService(bot);
 
         await bot.launch();
