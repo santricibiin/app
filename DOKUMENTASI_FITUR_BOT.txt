@@ -1,0 +1,453 @@
+================================================================================
+          DOKUMENTASI LENGKAP FITUR BOT TELEGRAM - TOKO OTOMATIS
+================================================================================
+
+Dibuat: 14 Juli 2026
+Deskripsi: Dokumentasi lengkap semua fitur bot, format command, dan alur kerja.
+
+================================================================================
+                          SISTEM ROLE / HAK AKSES
+================================================================================
+
+Bot ini memiliki 3 level role:
+
+1. OWNER   - Pemilik bot (ditentukan dari Telegram ID di config/env)
+             Bisa akses semua command owner dan fitur admin.
+
+2. ADMIN   - User yang terdaftar di tabel admins database.
+             (Saat ini belum ada command khusus admin, framework sudah siap)
+
+3. USER/MEMBER - Semua pengguna yang memulai bot (/start).
+                 Bisa browse produk, beli dengan saldo/QRIS, deposit saldo.
+
+================================================================================
+                      FITUR OWNER (PENGELOLAAN TOKO)
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+1. /addc - Tambah Kategori Produk
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /addc <nama_kategori>
+   CONTOH  : /addc Game
+             /addc Sosial Media
+             /addc Streaming
+
+   ALUR:
+   - Owner kirim command dengan nama kategori
+   - Bot validasi nama tidak kosong
+   - Bot simpan kategori baru ke database
+   - Bot balas konfirmasi berhasil
+
+   CATATAN:
+   - Nama kategori wajib diisi
+   - Kategori ini digunakan untuk mengelompokkan produk
+
+────────────────────────────────────────────────────────────────────────────────
+2. /addprd - Tambah Produk Baru
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /addprd <kategori> <kode> "<nama_produk>" <harga> <deskripsi> |snk <syarat_ketentuan>
+
+   CONTOH  : /addprd Game ML01 "Diamond Mobile Legend 100" 15000 Top up diamond ML |snk Berikan ID dan Server
+             /addprd Streaming NF01 "Netflix Premium 1 Bulan" 50000 Akun Netflix shared
+             /addprd Game FF01 "Free Fire 100 Diamond" 20000 Top up diamond FF |snk Berikan ID game
+
+   PENJELASAN PARAMETER:
+   - <kategori>       : Nama kategori yang sudah dibuat (harus cocok persis)
+   - <kode>           : Kode unik produk (digunakan untuk referensi)
+   - "<nama_produk>"  : Nama produk (WAJIB dalam tanda kutip ganda "...")
+   - <harga>          : Harga dalam angka (tanpa titik/koma)
+   - <deskripsi>      : Deskripsi singkat produk
+   - |snk <snk>       : (OPSIONAL) Syarat dan ketentuan pembelian
+
+   ALUR:
+   - Owner kirim command dengan format lengkap
+   - Bot parsing menggunakan regex
+   - Bot cek apakah kategori sudah ada
+   - Jika ada, produk disimpan ke database
+   - Bot balas konfirmasi produk berhasil ditambahkan
+
+   CATATAN:
+   - Kategori HARUS sudah ada (buat dulu pakai /addc)
+   - Nama produk WAJIB pakai tanda kutip ganda
+   - Harga harus angka (contoh: 15000, bukan 15.000)
+   - Bagian |snk bersifat opsional
+
+────────────────────────────────────────────────────────────────────────────────
+3. /addstok - Tambah Stok Produk
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /addstok <kode_produk> <stok1> <stok2> <stok3> ...
+
+   CONTOH  : /addstok ML01 diam100_acc1@gmail.com diam100_acc2@gmail.com
+             /addstok NF01 netflix1@mail.com|pass123 netflix2@mail.com|pass456
+             /addstok FF01 kode_voucher_001 kode_voucher_002 kode_voucher_003
+
+   ALUR:
+   - Owner kirim kode produk diikuti satu atau lebih data stok
+   - Bot validasi kode produk ada di database
+   - Setiap stok ditambahkan sebagai baris terpisah di database
+   - Bot balas jumlah stok yang berhasil ditambahkan
+
+   CATATAN:
+   - Kode produk harus sudah ada (buat dulu pakai /addprd)
+   - Setiap kata/string setelah kode = 1 stok
+   - Bisa tambah banyak stok sekaligus dalam 1 command
+   - Stok inilah yang akan dikirim ke pembeli saat transaksi berhasil
+
+────────────────────────────────────────────────────────────────────────────────
+4. /delc - Hapus Kategori
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /delc <nama_kategori>
+   CONTOH  : /delc Game
+             /delc Streaming
+
+   ALUR:
+   - Owner kirim nama kategori yang ingin dihapus
+   - Bot cari kategori di database
+   - Jika ditemukan, kategori dihapus
+   - Bot konfirmasi penghapusan
+
+────────────────────────────────────────────────────────────────────────────────
+5. /delstok - Hapus Stok Produk
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /delstok <kode_produk> <mode>
+
+   MODE YANG TERSEDIA:
+   - all           : Hapus SEMUA stok produk tersebut
+   - <angka>       : Hapus sejumlah stok (contoh: 5 = hapus 5 stok)
+   - <teks_stok>   : Hapus stok spesifik yang cocok dengan teks
+
+   CONTOH  : /delstok ML01 all
+             /delstok NF01 3
+             /delstok FF01 kode_voucher_001
+
+   ALUR:
+   - Owner kirim kode produk dan mode penghapusan
+   - Bot cek produk ada di database
+   - Bot hitung stok sebelum hapus
+   - Bot hapus sesuai mode yang dipilih
+   - Bot balas jumlah stok yang dihapus dan sisa stok
+
+────────────────────────────────────────────────────────────────────────────────
+6. /editprd - Edit Produk
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /editprd <kode_produk> <field> <nilai_baru>
+
+   FIELD YANG BISA DIEDIT:
+   - name        : Nama produk
+   - price       : Harga produk
+   - description : Deskripsi produk
+   - snk         : Syarat dan ketentuan
+
+   CONTOH  : /editprd ML01 name Diamond ML 200
+             /editprd ML01 price 25000
+             /editprd NF01 description Akun Netflix premium full garansi
+             /editprd FF01 snk Wajib berikan ID dan password game
+
+   ALUR:
+   - Owner kirim kode produk, field yang diedit, dan nilai baru
+   - Bot cek produk ada di database
+   - Bot validasi field (harus salah satu dari yang diizinkan)
+   - Bot update data produk
+   - Bot konfirmasi perubahan
+
+────────────────────────────────────────────────────────────────────────────────
+7. /liststok - Lihat Daftar Stok
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /liststok <kode_produk>
+   CONTOH  : /liststok ML01
+             /liststok NF01
+
+   ALUR:
+   - Owner kirim kode produk
+   - Bot cek produk ada
+   - Bot ambil semua stok dari database
+   - Bot tampilkan daftar stok ke owner
+
+────────────────────────────────────────────────────────────────────────────────
+8. /backup - Backup Database
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /backup now        → Backup langsung sekarang
+             /backup off        → Matikan auto backup
+             /backup <interval> → Set jadwal backup otomatis
+
+   CONTOH  : /backup now
+             /backup off
+             /backup 1h    (setiap 1 jam)
+             /backup 1d    (setiap 1 hari)
+
+   ALUR:
+   - "now"       : Bot langsung buat file backup dan kirim
+   - "off"       : Bot nonaktifkan scheduler backup
+   - "<interval>": Bot set timer untuk backup berkala
+
+────────────────────────────────────────────────────────────────────────────────
+9. /bc - Broadcast Pesan ke Semua User
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /bc <pesan>
+             Atau: Reply foto/video/dokumen dengan /bc <caption>
+
+   CONTOH  : /bc Promo hari ini! Diskon 50% semua produk
+             /bc (reply ke foto) Flash sale malam ini!
+
+   ALUR:
+   - Owner kirim teks atau reply media dengan /bc
+   - Bot ambil semua user dari database
+   - Bot kirim pesan/media ke setiap user satu per satu
+   - Bot laporkan berapa yang berhasil dan gagal
+
+   CATATAN:
+   - Bisa kirim teks biasa atau media (foto/video/dokumen)
+   - Untuk media, reply ke media tersebut lalu ketik /bc + caption
+
+────────────────────────────────────────────────────────────────────────────────
+10. /font - Toggle Font Stylish
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /font on   → Aktifkan font stylish
+             /font off  → Matikan font stylish
+
+   ALUR:
+   - Owner kirim on/off
+   - Bot ubah setting font
+   - Bot konfirmasi status font aktif/nonaktif
+
+────────────────────────────────────────────────────────────────────────────────
+11. /ping - Cek Bot Hidup
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /ping
+   RESPON  : Pong!
+
+   Digunakan untuk mengecek apakah bot masih aktif/berjalan.
+
+────────────────────────────────────────────────────────────────────────────────
+12. /setfoto - Set Foto Welcome/UI
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /setfoto on   → (reply ke foto) Aktifkan foto di UI
+             /setfoto off  → Nonaktifkan foto di UI
+
+   ALUR:
+   - "on"  : Owner reply ke foto + kirim /setfoto on
+             Bot simpan photo ID ke settings
+   - "off" : Bot nonaktifkan penggunaan foto di welcome
+
+────────────────────────────────────────────────────────────────────────────────
+13. /setpakasir - Set Integrasi Pembayaran QRIS (Pakasir)
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /setpakasir <slug> <apikey>
+   CONTOH  : /setpakasir toko-saya abc123def456
+
+   ALUR:
+   - Owner kirim slug dan API key dari Pakasir
+   - Bot simpan ke database settings
+   - Bot konfirmasi settings tersimpan
+
+   CATATAN:
+   - WAJIB diset agar fitur pembayaran QRIS bisa berjalan
+   - Slug dan API key didapat dari dashboard Pakasir
+
+────────────────────────────────────────────────────────────────────────────────
+14. /setrat - Set Rating & Statistik Tampilan
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /setrat <rating> <ulasan> <trxall> <alluser>
+
+   CONTOH  : /setrat 4.8 150 500 200
+
+   PENJELASAN PARAMETER:
+   - <rating>  : Nilai rating (0-5, bisa desimal)
+   - <ulasan>  : Jumlah ulasan
+   - <trxall>  : Total transaksi
+   - <alluser> : Total user
+
+   ALUR:
+   - Owner kirim 4 nilai
+   - Bot validasi rating antara 0-5
+   - Bot validasi nilai lain non-negatif
+   - Bot simpan ke settings
+   - Bot tampilkan konfirmasi
+
+────────────────────────────────────────────────────────────────────────────────
+15. /setwelc - Set Pesan Welcome
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /setwelc <pesan_welcome>
+
+   CONTOH  : /setwelc Halo {name}! Selamat datang di Toko Kami 🎉
+             Saldo kamu: Rp{saldo}
+             Total transaksi: {trx}
+
+   PLACEHOLDER YANG TERSEDIA:
+   - {name}     : Nama user
+   - {id}       : Telegram ID user
+   - {username} : Username Telegram
+   - {saldo}    : Saldo user saat ini
+   - {trx}      : Jumlah transaksi user
+   - {tanggal}  : Tanggal hari ini
+   - {rating}   : Rating toko
+   - {ulasan}   : Jumlah ulasan
+   - {trxall}   : Total semua transaksi
+   - {alluser}  : Total semua user
+   - {motiv}    : Kata motivasi random
+
+   ALUR:
+   - Owner kirim teks welcome
+   - Bot simpan ke settings
+   - Bot konfirmasi pesan welcome sudah diupdate
+
+
+================================================================================
+                      FITUR USER / MEMBER (PEMBELI)
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+1. /start - Mulai Bot / Registrasi
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /start
+
+   ALUR:
+   1. User buka bot atau kirim /start
+   2. Bot cek apakah user sudah terdaftar
+   3. Jika belum, bot otomatis daftarkan ke database
+   4. Bot kirim sticker welcome (jika ada)
+   5. Bot tampilkan panel welcome dengan:
+      - Pesan welcome (dari /setwelc)
+      - Foto (jika diset dengan /setfoto)
+      - Tombol navigasi (Produk, Saldo, dll)
+   6. Bot notifikasi owner tentang user baru
+
+────────────────────────────────────────────────────────────────────────────────
+2. /produk - Lihat & Beli Produk
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /produk
+
+   ALUR LENGKAP:
+   1. User kirim /produk
+   2. Bot hapus pesan command (biar chat bersih)
+   3. Bot tampilkan daftar KATEGORI dalam bentuk tombol
+   4. User tap kategori yang diinginkan
+   5. Bot tampilkan daftar PRODUK dalam kategori tersebut
+      (nama, harga, jumlah stok)
+   6. User tap produk yang diinginkan
+   7. Bot tampilkan DETAIL PRODUK:
+      - Nama produk
+      - Harga
+      - Deskripsi
+      - Stok tersedia
+      - Syarat & ketentuan (jika ada)
+      - Tombol jumlah (+/-/edit manual)
+      - Tombol Beli dengan Saldo
+      - Tombol Beli dengan QRIS
+   8. User bisa:
+      a. Tambah/kurangi jumlah dengan tombol +/-
+      b. Edit jumlah manual (tap tombol pensil, lalu ketik angka)
+      c. Tap "Beli Saldo" untuk bayar dengan saldo
+      d. Tap "Beli QRIS" untuk bayar via QRIS
+
+   ALUR BELI DENGAN SALDO:
+   1. Bot cek stok tersedia >= jumlah yang diminta
+   2. Bot cek saldo user >= total harga
+   3. Bot potong saldo user
+   4. Bot kurangi stok dari database
+   5. Bot kirim data produk (akun/kode/voucher) ke user
+   6. Bot kirim pesan sukses
+   7. Bot notifikasi owner tentang pembelian
+
+   ALUR BELI DENGAN QRIS:
+   1. Bot cek stok tersedia >= jumlah yang diminta
+   2. Bot buat record transaksi (status: pending)
+   3. Bot generate invoice QRIS via Pakasir API
+   4. Bot kirim QR code + link pembayaran ke user
+   5. User scan dan bayar
+   6. Webhook dari Pakasir mengkonfirmasi pembayaran
+   7. Bot update status transaksi jadi complete
+   8. Bot kurangi stok dari database
+   9. Bot kirim data produk ke user
+   10. Bot kirim pesan sukses
+   11. Bot notifikasi owner
+
+────────────────────────────────────────────────────────────────────────────────
+3. /saldo - Cek Saldo & Deposit
+────────────────────────────────────────────────────────────────────────────────
+   FORMAT  : /saldo
+
+   ALUR:
+   1. User kirim /saldo
+   2. Bot tampilkan saldo saat ini
+   3. Bot tampilkan tombol nominal deposit yang tersedia
+   4. User tap nominal yang diinginkan
+   5. Bot buat invoice QRIS untuk deposit
+   6. Bot kirim QR code + link pembayaran
+   7. User scan dan bayar
+   8. Webhook konfirmasi pembayaran masuk
+   9. Bot tambah saldo user sesuai nominal
+   10. Bot konfirmasi deposit berhasil ke user
+
+
+================================================================================
+                         ALUR KESELURUHAN SISTEM
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                        SETUP AWAL (OWNER)                           │
+├─────────────────────────────────────────────────────────────────────┤
+│ 1. /setpakasir <slug> <apikey>    → Setup pembayaran QRIS          │
+│ 2. /setwelc <pesan>               → Set pesan welcome              │
+│ 3. /setfoto on (reply foto)       → Set foto UI                    │
+│ 4. /setrat 4.8 100 500 200        → Set statistik tampilan         │
+│ 5. /addc <kategori>               → Buat kategori produk           │
+│ 6. /addprd ...                    → Tambah produk                  │
+│ 7. /addstok <kode> <stok...>      → Isi stok produk                │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                    ALUR MEMBER BELANJA                               │
+├─────────────────────────────────────────────────────────────────────┤
+│ 1. /start                         → Daftar & lihat welcome         │
+│ 2. /saldo                         → Deposit saldo via QRIS         │
+│ 3. /produk                        → Browse & beli produk           │
+│    └→ Pilih kategori → Pilih produk → Set jumlah → Bayar           │
+│       └→ Saldo (langsung) atau QRIS (generate QR)                  │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                    MAINTENANCE (OWNER)                               │
+├─────────────────────────────────────────────────────────────────────┤
+│ - /backup now/off/<interval>      → Backup database                 │
+│ - /bc <pesan>                     → Broadcast ke semua user         │
+│ - /editprd <kode> <field> <val>   → Edit info produk                │
+│ - /delstok <kode> <mode>          → Hapus stok                      │
+│ - /delc <kategori>                → Hapus kategori                  │
+│ - /liststok <kode>                → Cek stok tersisa                │
+│ - /font on/off                    → Toggle font stylish             │
+│ - /ping                           → Health check                    │
+└─────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+                              CATATAN PENTING
+================================================================================
+
+1. URUTAN SETUP PRODUK:
+   /addc (kategori) → /addprd (produk) → /addstok (isi stok)
+   Kategori HARUS ada sebelum bisa tambah produk.
+   Produk HARUS ada sebelum bisa tambah stok.
+
+2. PEMBAYARAN QRIS:
+   - Wajib setup /setpakasir terlebih dahulu
+   - Menggunakan layanan Pakasir sebagai payment gateway
+   - Webhook otomatis mengkonfirmasi pembayaran
+
+3. STOK:
+   - Setiap stok = 1 item yang dikirim ke pembeli
+   - Bisa berupa akun, kode voucher, link, atau teks apapun
+   - Stok dikirim langsung ke chat pembeli setelah bayar
+
+4. SALDO:
+   - User bisa deposit saldo via QRIS
+   - Saldo digunakan untuk pembelian instan (tanpa perlu scan QR lagi)
+
+5. ADMIN ROLE:
+   - Framework admin sudah siap di middleware
+   - Belum ada command khusus admin yang diimplementasi
+   - Bisa dikembangkan untuk kasir/operator toko
+
+================================================================================
+                            AKHIR DOKUMENTASI
+================================================================================
