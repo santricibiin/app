@@ -119,8 +119,14 @@ install_fresh() {
         print_warn "Webhook URL kosong, bot akan jalan mode polling"
     fi
 
-    read -p "  Port untuk bot (default: 3000): " BOT_PORT
+    read -p "  Port webhook Pakasir (default: 3000): " BOT_PORT
     BOT_PORT=${BOT_PORT:-3000}
+
+    read -p "  Port web admin panel (default: 3001): " WEB_PORT
+    WEB_PORT=${WEB_PORT:-3001}
+
+    read -p "  Password login web admin (default: admin123): " ADMIN_PASSWORD
+    ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
 
     read -p "  Password MySQL (buat baru): " MYSQL_PASS
     if [ -z "$MYSQL_PASS" ]; then
@@ -137,7 +143,9 @@ install_fresh() {
     echo -e "  Bot Token   : ${BOT_TOKEN:0:10}..."
     echo -e "  Owner ID    : $OWNER_ID"
     echo -e "  Webhook     : ${WEBHOOK_URL:-Polling Mode}"
-    echo -e "  Port        : $BOT_PORT"
+    echo -e "  Port Webhook: $BOT_PORT"
+    echo -e "  Port Web    : $WEB_PORT"
+    echo -e "  Admin Pass  : ${ADMIN_PASSWORD:0:3}***"
     echo -e "  DB Name     : $DB_NAME"
     echo -e "  MySQL Pass  : ${MYSQL_PASS:0:3}***"
     print_separator
@@ -226,6 +234,10 @@ DB_NAME=${DB_NAME}
 PORT=${BOT_PORT}
 WEBHOOK_URL=${WEBHOOK_URL}
 
+# Web Admin Panel
+WEB_PORT=${WEB_PORT}
+ADMIN_PASSWORD=${ADMIN_PASSWORD}
+
 # Node Environment
 NODE_ENV=production
 EOF
@@ -249,8 +261,9 @@ EOF
     ufw allow 80/tcp
     ufw allow 443/tcp
     ufw allow ${BOT_PORT}/tcp
+    ufw allow ${WEB_PORT}/tcp
     ufw --force enable
-    print_success "Firewall configured"
+    print_success "Firewall configured (ports: 22, 80, 443, ${BOT_PORT}, ${WEB_PORT})"
 
     # ─── Start with PM2 ───
     print_info "Starting bot with PM2..."
@@ -271,12 +284,15 @@ EOF
     echo "  ║  App Dir    : $APP_DIR"
     echo "  ║  Bot Status : Running (PM2)"
     echo "  ║  DB Name    : $DB_NAME"
-    echo "  ║  Port       : $BOT_PORT"
+    echo "  ║  Webhook    : Port $BOT_PORT"
+    echo "  ║  Web Admin  : Port $WEB_PORT"
     echo "  ╠══════════════════════════════════════════════════════╣"
     echo "  ║  Commands:                                          ║"
     echo "  ║  pm2 logs telegram-bot   → Lihat log               ║"
     echo "  ║  pm2 restart telegram-bot → Restart bot             ║"
     echo "  ║  pm2 stop telegram-bot   → Stop bot                ║"
+    echo "  ║                                                     ║"
+    echo "  ║  Web Admin: http://IP_VPS:${WEB_PORT}/login         "
     echo "  ╚══════════════════════════════════════════════════════╝"
     echo -e "${NC}"
     print_separator
@@ -467,23 +483,96 @@ uninstall_bot() {
     print_header
     echo -e "${RED}  ═══ UNINSTALL BOT ═══${NC}"
     echo ""
-    print_warn "PERINGATAN: Ini akan menghapus bot dari PM2"
-    print_warn "File di $APP_DIR TIDAK akan dihapus"
+    print_warn "Pilih level uninstall:"
     echo ""
-    read -p "  Yakin uninstall? (y/n): " confirm
-    if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
-        pm2 stop telegram-bot 2>/dev/null || true
-        pm2 delete telegram-bot 2>/dev/null || true
-        pm2 save
-        print_success "Bot dihapus dari PM2"
-        echo ""
-        read -p "  Hapus juga database? (y/n): " del_db
-        if [ "$del_db" = "y" ] || [ "$del_db" = "Y" ]; then
+    echo -e "  ${GREEN}1)${NC} Ringan  - Hapus bot dari PM2 saja (file tetap ada)"
+    echo -e "  ${GREEN}2)${NC} Sedang  - Hapus bot + database + file aplikasi"
+    echo -e "  ${GREEN}3)${NC} Total   - Hapus semua (termasuk Node.js, MySQL, PM2)"
+    echo -e "  ${GREEN}0)${NC} Batal"
+    echo ""
+    read -p "  Pilihan [0-3]: " uninstall_level
+
+    case $uninstall_level in
+        0) show_menu; return ;;
+        1)
+            echo ""
+            print_info "Menghapus bot dari PM2..."
+            pm2 stop telegram-bot 2>/dev/null || true
+            pm2 delete telegram-bot 2>/dev/null || true
+            pm2 save
+            print_success "Bot dihapus dari PM2"
+            print_info "File di $APP_DIR masih tersimpan"
+            ;;
+        2)
+            echo ""
             read -p "  Password MySQL root: " MYSQL_PASS
+            echo ""
+            print_info "Menghapus bot dari PM2..."
+            pm2 stop telegram-bot 2>/dev/null || true
+            pm2 delete telegram-bot 2>/dev/null || true
+            pm2 save
+            print_success "Bot dihapus dari PM2"
+
+            print_info "Menghapus database..."
             mysql -u root -p"${MYSQL_PASS}" -e "DROP DATABASE IF EXISTS telegram_bot;" 2>/dev/null
             print_success "Database dihapus"
-        fi
-    fi
+
+            print_info "Menghapus file aplikasi di $APP_DIR..."
+            rm -rf "$APP_DIR"
+            print_success "File aplikasi dihapus"
+            ;;
+        3)
+            echo ""
+            print_error "╔══════════════════════════════════════════════════════╗"
+            print_error "║  PERINGATAN: Ini akan menghapus SEMUA komponen:     ║"
+            print_error "║  - Bot & file aplikasi                              ║"
+            print_error "║  - Database MySQL & MySQL Server                    ║"
+            print_error "║  - Node.js & PM2                                    ║"
+            print_error "║  Pastikan tidak ada service lain yang pakai!        ║"
+            print_error "╚══════════════════════════════════════════════════════╝"
+            echo ""
+            read -p "  Ketik 'HAPUS SEMUA' untuk konfirmasi: " confirm_total
+            if [ "$confirm_total" != "HAPUS SEMUA" ]; then
+                print_info "Dibatalkan"
+                sleep 2; show_menu; return
+            fi
+
+            echo ""
+            print_info "Menghapus bot dari PM2..."
+            pm2 stop telegram-bot 2>/dev/null || true
+            pm2 delete telegram-bot 2>/dev/null || true
+            pm2 kill 2>/dev/null || true
+            print_success "PM2 process dihapus"
+
+            print_info "Menghapus file aplikasi..."
+            rm -rf "$APP_DIR"
+            print_success "File aplikasi dihapus"
+
+            print_info "Menghapus MySQL Server..."
+            systemctl stop mysql 2>/dev/null || true
+            apt purge -y mysql-server mysql-client mysql-common 2>/dev/null || true
+            apt autoremove -y 2>/dev/null || true
+            rm -rf /var/lib/mysql /etc/mysql
+            print_success "MySQL dihapus"
+
+            print_info "Menghapus PM2..."
+            npm uninstall -g pm2 2>/dev/null || true
+            print_success "PM2 dihapus"
+
+            print_info "Menghapus Node.js..."
+            apt purge -y nodejs 2>/dev/null || true
+            apt autoremove -y 2>/dev/null || true
+            rm -f /etc/apt/sources.list.d/nodesource.list 2>/dev/null
+            print_success "Node.js dihapus"
+
+            echo ""
+            print_success "Semua komponen berhasil dihapus!"
+            ;;
+        *)
+            print_error "Pilihan tidak valid"
+            sleep 1; show_menu; return
+            ;;
+    esac
 
     echo ""
     read -p "  Tekan Enter untuk kembali ke menu..." _
